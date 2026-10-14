@@ -27,7 +27,8 @@ jobs:
           JDK_PATH="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")"
           echo "JAVA_HOME=$JDK_PATH" >> "$GITHUB_ENV"
           keytool -genkeypair -v -keystore "$HOME/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          python3 -c 'import os; p="export_presets.cfg"; s=open(p).read(); s=s.replace("[preset.0.options]\n", "[preset.0.options]\nkeystore/debug="+chr(34)+os.path.expanduser("~/debug.keystore")+chr(34)+"\nkeystore/debug_user="+chr(34)+"androiddebugkey"+chr(34)+"\nkeystore/debug_password="+chr(34)+"android"+chr(34)+"\n"); open(p,"w").write(s)'
+          awk -v key="$HOME/debug.keystore" '/^\[preset.0.options\]$/ { print; print "keystore/debug=\"" key "\""; print "keystore/debug_user=\"androiddebugkey\""; print "keystore/debug_password=\"android\""; next } { print }' export_presets.cfg > /tmp/export_presets.cfg
+          mv /tmp/export_presets.cfg export_presets.cfg
       - name: Import project
         run: godot --headless --editor --path . --import
       - name: Export Android APK
