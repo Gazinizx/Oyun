@@ -28,12 +28,22 @@ jobs:
           echo "JAVA_HOME=$JDK_PATH" >> "$GITHUB_ENV"
           SDK_PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}}"
           test -d "$SDK_PATH"
-          SDKMANAGER="$SDK_PATH/cmdline-tools/latest/bin/sdkmanager"
-          if [ -x "$SDKMANAGER" ]; then
-            yes | "$SDKMANAGER" --sdk_root="$SDK_PATH" --licenses || true
-            "$SDKMANAGER" --sdk_root="$SDK_PATH" "platform-tools" "platforms;android-33" "build-tools;33.0.2"
+          SDKMANAGER=""
+          for candidate in "$SDK_PATH/cmdline-tools/latest/bin/sdkmanager" "$SDK_PATH/cmdline-tools/cmdline-tools/bin/sdkmanager" "$SDK_PATH/tools/bin/sdkmanager"; do
+            if [ -x "$candidate" ]; then SDKMANAGER="$candidate"; break; fi
+          done
+          if [ -z "$SDKMANAGER" ] && command -v sdkmanager >/dev/null 2>&1; then SDKMANAGER="$(command -v sdkmanager)"; fi
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager not found under $SDK_PATH"
+            find "$SDK_PATH" -maxdepth 5 -name sdkmanager -type f -print
+            exit 1
           fi
+          yes | "$SDKMANAGER" --sdk_root="$SDK_PATH" --licenses || true
+          "$SDKMANAGER" --sdk_root="$SDK_PATH" "platform-tools" "platforms;android-33" "platforms;android-35" "build-tools;33.0.2" "build-tools;35.0.0"
+          test -s "$SDK_PATH/platforms/android-33/android.jar"
+          test -s "$SDK_PATH/platforms/android-35/android.jar"
           test -x "$SDK_PATH/build-tools/33.0.2/aapt"
+          test -x "$SDK_PATH/build-tools/35.0.0/aapt"
           mkdir -p "$HOME/.config/godot"
           cat > "$HOME/.config/godot/editor_settings-4.4.tres" <<EOF
           [gd_resource type="EditorSettings" format=3]
@@ -45,7 +55,7 @@ jobs:
           awk -v key="$HOME/debug.keystore" '/^\[preset.0.options\]$/ { print; print "keystore/debug=\"" key "\""; print "keystore/debug_user=\"androiddebugkey\""; print "keystore/debug_password=\"android\""; next } { print }' export_presets.cfg > /tmp/export_presets.cfg
           mv /tmp/export_presets.cfg export_presets.cfg
           echo "Configured Android SDK: $SDK_PATH"
-          ls -la "$SDK_PATH/build-tools/33.0.2"
+          "$SDKMANAGER" --sdk_root="$SDK_PATH" --list_installed
       - name: Import project
         run: godot --headless --editor --path . --import
       - name: Export and verify APK
@@ -53,7 +63,7 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p build
-          godot --headless --path . --export-debug "Android" build/AltinAvi.apk
+          godot --headless --verbose --path . --export-debug "Android" build/AltinAvi.apk 2>&1 | tee /tmp/godot-export.log
           test -s build/AltinAvi.apk
           file build/AltinAvi.apk
           unzip -t build/AltinAvi.apk
