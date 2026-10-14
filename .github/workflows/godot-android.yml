@@ -10,7 +10,7 @@ jobs:
       image: barichello/godot-ci:4.4.1
     steps:
       - uses: actions/checkout@v4
-      - name: Install Godot Android export templates
+      - name: Install Android export templates
         shell: bash
         run: |
           set -euxo pipefail
@@ -19,46 +19,46 @@ jobs:
           mkdir -p /tmp/godot-templates
           unzip -q /tmp/templates.tpz -d /tmp/godot-templates
           cp -a /tmp/godot-templates/templates/. "$HOME/.local/share/godot/export_templates/4.4.1.stable/"
-      - name: Configure Android signing and Java
+          ls -la "$HOME/.local/share/godot/export_templates/4.4.1.stable"
+      - name: Configure Android SDK and signing
         shell: bash
         run: |
           set -euxo pipefail
           javac -version
           JDK_PATH="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")"
           echo "JAVA_HOME=$JDK_PATH" >> "$GITHUB_ENV"
-          keytool -genkeypair -v -keystore "$HOME/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          awk -v key="$HOME/debug.keystore" '/^\[preset.0.options\]$/ { print; print "keystore/debug=\"" key "\""; print "keystore/debug_user=\"androiddebugkey\""; print "keystore/debug_password=\"android\""; next } { print }' export_presets.cfg > /tmp/export_presets.cfg
-          mv /tmp/export_presets.cfg export_presets.cfg
-      - name: Configure Godot Android SDK settings
-        shell: bash
-        run: |
-          set -euxo pipefail
-          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
           SDK_PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}}"
-          if [ ! -d "$SDK_PATH" ]; then
-            for candidate in /opt/android-sdk /usr/local/android-sdk /root/android-sdk /usr/lib/android-sdk; do
-              if [ -d "$candidate" ]; then SDK_PATH="$candidate"; break; fi
-            done
+          test -d "$SDK_PATH"
+          if command -v sdkmanager >/dev/null 2>&1; then
+            yes | sdkmanager --sdk_root="$SDK_PATH" --licenses || true
+            sdkmanager --sdk_root="$SDK_PATH" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          elif [ -x "$SDK_PATH/cmdline-tools/latest/bin/sdkmanager" ]; then
+            yes | "$SDK_PATH/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_PATH" --licenses || true
+            "$SDK_PATH/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_PATH" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
           fi
-          test -d "$SDK_PATH" || { echo "Android SDK directory not found"; find / -name adb -type f 2>/dev/null | head -20; exit 1; }
           mkdir -p "$HOME/.config/godot"
-          cat > "$HOME/.config/godot/editor_settings-4.4.tres" <<EOF
+          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
           [gd_resource type="EditorSettings" format=3]
           [resource]
           export/android/android_sdk_path = "$SDK_PATH"
-          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/java_sdk_path = "$JDK_PATH"
           EOF
-          echo "Using Android SDK: $SDK_PATH"
+          keytool -genkeypair -keystore "$HOME/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          awk -v key="$HOME/debug.keystore" '/^\[preset.0.options\]$/ { print; print "keystore/debug=\"" key "\""; print "keystore/debug_user=\"androiddebugkey\""; print "keystore/debug_password=\"android\""; next } { print }' export_presets.cfg > /tmp/export_presets.cfg
+          mv /tmp/export_presets.cfg export_presets.cfg
+          echo "Android SDK: $SDK_PATH"
+          find "$SDK_PATH" -maxdepth 3 -type d | head -80
       - name: Import project
         run: godot --headless --editor --path . --import
-      - name: Export Android APK
+      - name: Export and verify APK
         shell: bash
         run: |
           set -euxo pipefail
           mkdir -p build
           godot --headless --path . --export-debug "Android" build/AltinAvi.apk
           test -s build/AltinAvi.apk
+          file build/AltinAvi.apk
+          unzip -t build/AltinAvi.apk
       - uses: actions/upload-artifact@v4
         with:
           name: Altin-Avi-Native-Android-APK
