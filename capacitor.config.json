@@ -1,7 +1,7 @@
 {
   "appId": "com.gazinizx.reklamodulu",
   "appName": "Reklam Ödülü",
-  "webDir": ".",
+  "webDir": "www",
   "server": {
     "androidScheme": "https"
   }
