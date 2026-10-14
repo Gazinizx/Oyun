@@ -19,8 +19,7 @@ jobs:
           mkdir -p /tmp/godot-templates
           unzip -q /tmp/templates.tpz -d /tmp/godot-templates
           cp -a /tmp/godot-templates/templates/. "$HOME/.local/share/godot/export_templates/4.4.1.stable/"
-          ls -la "$HOME/.local/share/godot/export_templates/4.4.1.stable"
-      - name: Configure Android SDK and signing
+      - name: Configure Android SDK, Java and signing
         shell: bash
         run: |
           set -euxo pipefail
@@ -29,15 +28,14 @@ jobs:
           echo "JAVA_HOME=$JDK_PATH" >> "$GITHUB_ENV"
           SDK_PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}}"
           test -d "$SDK_PATH"
-          if command -v sdkmanager >/dev/null 2>&1; then
-            yes | sdkmanager --sdk_root="$SDK_PATH" --licenses || true
-            sdkmanager --sdk_root="$SDK_PATH" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-          elif [ -x "$SDK_PATH/cmdline-tools/latest/bin/sdkmanager" ]; then
-            yes | "$SDK_PATH/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_PATH" --licenses || true
-            "$SDK_PATH/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_PATH" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          SDKMANAGER="$SDK_PATH/cmdline-tools/latest/bin/sdkmanager"
+          if [ -x "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --sdk_root="$SDK_PATH" --licenses || true
+            "$SDKMANAGER" --sdk_root="$SDK_PATH" "platform-tools" "platforms;android-33" "build-tools;33.0.2"
           fi
+          test -x "$SDK_PATH/build-tools/33.0.2/aapt"
           mkdir -p "$HOME/.config/godot"
-          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
+          cat > "$HOME/.config/godot/editor_settings-4.4.tres" <<EOF
           [gd_resource type="EditorSettings" format=3]
           [resource]
           export/android/android_sdk_path = "$SDK_PATH"
@@ -46,8 +44,8 @@ jobs:
           keytool -genkeypair -keystore "$HOME/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           awk -v key="$HOME/debug.keystore" '/^\[preset.0.options\]$/ { print; print "keystore/debug=\"" key "\""; print "keystore/debug_user=\"androiddebugkey\""; print "keystore/debug_password=\"android\""; next } { print }' export_presets.cfg > /tmp/export_presets.cfg
           mv /tmp/export_presets.cfg export_presets.cfg
-          echo "Android SDK: $SDK_PATH"
-          find "$SDK_PATH" -maxdepth 3 -type d | head -80
+          echo "Configured Android SDK: $SDK_PATH"
+          ls -la "$SDK_PATH/build-tools/33.0.2"
       - name: Import project
         run: godot --headless --editor --path . --import
       - name: Export and verify APK
